@@ -235,38 +235,76 @@ let tracks = [];
 let currentIndex = -1;
 let autoNext = false;
 
-async function searchTrack(song, artist){
-  const q = encodeURIComponent(song + ' ' + artist);
-  const url = `https://itunes.apple.com/search?term=${q}&country=jp&media=music&entity=song&limit=5&lang=ja_jp`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error('検索失敗 ' + res.status);
-  const data = await res.json();
-  if (!data.results || !data.results.length) return null;
-  // アーティスト名が一致するものを優先
-  const norm = s => String(s||'').toLowerCase().replace(/\s+/g,'');
-  const wantArtist = norm(artist);
-  let best = data.results.find(r => norm(r.artistName).includes(wantArtist) || wantArtist.includes(norm(r.artistName)));
-  return best || data.results[0];
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+// localStorage キャッシュ
+const CACHE_KEY = 'jp_music_playlist_v3';
+function loadCache(){
+  try { return JSON.parse(localStorage.getItem(CACHE_KEY) || '{}'); }
+  catch(e) { return {}; }
+}
+function saveCache(cache){
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify(cache)); }
+  catch(e) {}
 }
 
-async function loadPlaylist(){
+async function searchTrack(song, artist, retries = 3){
+  const q = encodeURIComponent(song + ' ' + artist);
+  const url = `https://itunes.apple.com/search?term=${q}&country=jp&media=music&entity=song&limit=5&lang=ja_jp`;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(url);
+      if (res.status === 403 || res.status === 429) {
+        // レート制限 — 段階的に待機を延ばす
+        await sleep(3000 + attempt * 2000);
+        continue;
+      }
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      if (!data.results || !data.results.length) return null;
+      const norm = s => String(s||'').toLowerCase().replace(/\s+/g,'');
+      const wantArtist = norm(artist);
+      let best = data.results.find(r => norm(r.artistName).includes(wantArtist) || wantArtist.includes(norm(r.artistName)));
+      return best || data.results[0];
+    } catch (e) {
+      if (attempt === retries) return null;
+      await sleep(1500 + attempt * 1000);
+    }
+  }
+  return null;
+}
+
+async function loadPlaylist(forceReload = false){
   el('loadBtn').disabled = true;
   tracksEl.innerHTML = '';
   tracks = [];
 
-  // バッチ処理 (10件ずつ並列)
-  statusEl.innerHTML = '<div class="spinner"></div><div class="progress-text">楽曲情報を取得中… (0/' + PLAYLIST.length + ')</div>';
-  const BATCH = 10;
-  const results = new Array(PLAYLIST.length);
-  let done = 0;
-  for (let start = 0; start < PLAYLIST.length; start += BATCH) {
-    const slice = PLAYLIST.slice(start, start + BATCH);
-    const batchResults = await Promise.all(slice.map(async (item, j) => {
-      const i = start + j;
-      try {
-        const found = await searchTrack(item.song, item.artist);
-        if (!found) return {rank:i+1, title:item.song, artist:item.artist, artwork:'', previewUrl:null, url:'#', missing:true};
-        return {
+  const cache = forceReload ? {} : loadCache();
+  let cachedCount = 0;
+
+  // まずキャッシュから即座に表示
+  PLAYLIST.forEach((item, i) => {
+    const key = item.song + '||' + item.artist;
+    if (cache[key]) {
+      tracks[i] = { ...cache[key], rank: i+1 };
+      cachedCount++;
+    }
+  });
+  if (cachedCount > 0) renderTracks();
+
+  statusEl.innerHTML = '<div class="spinner"></div><div class="progress-text">楽曲情報を取得中… (' + cachedCount + '/' + PLAYLIST.length + ')</div>';
+
+  // 未取得の曲のみを逐次処理（レート制限回避のため1件ずつ、間に300ms）
+  let done = cachedCount;
+  for (let i = 0; i < PLAYLIST.length; i++) {
+    if (tracks[i] && tracks[i].previewUrl) continue;
+    const item = PLAYLIST[i];
+    const key = item.song + '||' + item.artist;
+    let result;
+    try {
+      const found = await searchTrack(item.song, item.artist);
+      if (found) {
+        result = {
           rank: i+1,
           title: found.trackName || item.song,
           artist: found.artistName || item.artist,
@@ -274,26 +312,33 @@ async function loadPlaylist(){
           previewUrl: found.previewUrl,
           url: found.trackViewUrl || '#'
         };
-      } catch(e) {
-        return {rank:i+1, title:item.song, artist:item.artist, artwork:'', previewUrl:null, url:'#', missing:true};
+        cache[key] = result;
+      } else {
+        result = {rank:i+1, title:item.song, artist:item.artist, artwork:'', previewUrl:null, url:'#', missing:true};
       }
-    }));
-    batchResults.forEach((r, j) => { results[start + j] = r; done++; });
-    statusEl.querySelector('.progress-text').textContent = `楽曲情報を取得中… (${done}/${PLAYLIST.length})`;
-    // 部分的な結果を逐次表示
-    tracks = results.filter(Boolean);
-    renderTracks();
+    } catch(e) {
+      result = {rank:i+1, title:item.song, artist:item.artist, artwork:'', previewUrl:null, url:'#', missing:true};
+    }
+    tracks[i] = result;
+    done++;
+    if (done % 5 === 0 || done === PLAYLIST.length) {
+      saveCache(cache);
+      renderTracks();
+    }
+    const progressEl = statusEl.querySelector('.progress-text');
+    if (progressEl) progressEl.textContent = `楽曲情報を取得中… (${done}/${PLAYLIST.length})`;
+    // レート制限回避のため待機（キャッシュヒットなし時のみ）
+    await sleep(300);
   }
 
-  tracks = results;
+  saveCache(cache);
+  renderTracks();
   const found = tracks.filter(t => t.previewUrl).length;
   if (found === 0) {
     statusEl.innerHTML = '<div class="error">楽曲情報を取得できませんでした。<br>インターネット接続を確認してから再度お試しください。</div>';
-    el('loadBtn').disabled = false;
-    return;
+  } else {
+    statusEl.innerHTML = `<div style="color:rgba(255,255,255,0.5);font-size:0.85rem">${found}/${PLAYLIST.length} 曲を読み込みました</div>`;
   }
-  renderTracks();
-  statusEl.innerHTML = '';
   el('playAllBtn').disabled = false;
   el('loadBtn').disabled = false;
   el('loadBtn').textContent = '再読み込み';
@@ -371,7 +416,7 @@ el('progress').addEventListener('click', (e) => {
   if(player.duration) player.currentTime = pct * player.duration;
 });
 
-el('loadBtn').addEventListener('click', loadPlaylist);
+el('loadBtn').addEventListener('click', () => loadPlaylist(true));
 el('playAllBtn').addEventListener('click', () => {
   autoNext = true;
   let first = tracks.findIndex(t => t.previewUrl);

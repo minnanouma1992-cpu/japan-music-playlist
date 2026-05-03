@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>邦楽人気プレイリスト 100選 — iTunes プレビュー試聴</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  :root{
+    --bg-1:#0f0c29;--bg-2:#302b63;--bg-3:#24243e;
+    --accent:#ff4081;--accent-2:#7c4dff;
+    --text:#fff;--muted:rgba(255,255,255,0.65);
+    --card:rgba(255,255,255,0.06);--card-hover:rgba(255,255,255,0.12);
+    --border:rgba(255,255,255,0.1);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif;
+    background:linear-gradient(135deg,var(--bg-1) 0%,var(--bg-2) 50%,var(--bg-3) 100%);
+    background-attachment:fixed;color:var(--text);min-height:100vh;padding:40px 20px 100px;
+  }
+  .container{max-width:900px;margin:0 auto}
+  header{text-align:center;margin-bottom:40px}
+  h1{
+    font-size:2.5rem;font-weight:800;
+    background:linear-gradient(90deg,var(--accent),var(--accent-2));
+    -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+    margin-bottom:8px;
+  }
+  .subtitle{color:var(--muted);font-size:0.95rem}
+  .controls{display:flex;gap:12px;justify-content:center;margin:24px 0;flex-wrap:wrap}
+  button{
+    background:var(--card);color:var(--text);border:1px solid var(--border);
+    padding:10px 18px;border-radius:24px;cursor:pointer;font-size:0.9rem;transition:all 0.2s;
+  }
+  button:hover{background:var(--card-hover);transform:translateY(-1px)}
+  button.primary{background:linear-gradient(90deg,var(--accent),var(--accent-2));border:none;font-weight:600}
+  button:disabled{opacity:0.4;cursor:not-allowed}
+  .status{text-align:center;padding:40px;color:var(--muted)}
+  .spinner{
+    display:inline-block;width:32px;height:32px;border:3px solid var(--border);
+    border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .progress-text{margin-top:12px;font-size:0.85rem}
+  .track{
+    display:flex;align-items:center;gap:16px;background:var(--card);
+    border:1px solid var(--border);border-radius:16px;padding:14px;margin-bottom:12px;transition:all 0.2s;
+  }
+  .track:hover{background:var(--card-hover);transform:translateX(4px)}
+  .rank{
+    font-size:1.6rem;font-weight:800;width:48px;text-align:center;
+    background:linear-gradient(180deg,var(--accent),var(--accent-2));
+    -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;flex-shrink:0;
+  }
+  .artwork{width:72px;height:72px;border-radius:8px;object-fit:cover;flex-shrink:0;box-shadow:0 4px 12px rgba(0,0,0,0.3);background:#222}
+  .info{flex:1;min-width:0}
+  .title{font-weight:600;font-size:1rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .artist{color:var(--muted);font-size:0.85rem;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .play-btn{
+    width:44px;height:44px;border-radius:50%;
+    background:linear-gradient(135deg,var(--accent),var(--accent-2));
+    border:none;color:white;cursor:pointer;display:flex;align-items:center;justify-content:center;
+    flex-shrink:0;transition:transform 0.2s;font-size:1rem;
+  }
+  .play-btn:hover{transform:scale(1.1)}
+  .play-btn:disabled{opacity:0.3;cursor:not-allowed;transform:none}
+  .external{color:var(--muted);text-decoration:none;font-size:1.2rem;padding:8px}
+  .external:hover{color:var(--accent)}
+  audio{display:none}
+  .now-playing{
+    position:fixed;bottom:0;left:0;right:0;background:rgba(15,12,41,0.95);
+    backdrop-filter:blur(20px);border-top:1px solid var(--border);
+    padding:12px 20px;display:none;align-items:center;gap:14px;z-index:100;
+  }
+  .now-playing.active{display:flex}
+  .now-playing img{width:48px;height:48px;border-radius:6px}
+  .np-info{flex:1;min-width:0}
+  .np-title{font-weight:600;font-size:0.9rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .np-artist{color:var(--muted);font-size:0.8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .progress{height:3px;background:var(--border);border-radius:2px;flex:1;max-width:300px;overflow:hidden;cursor:pointer}
+  .progress-bar{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-2));width:0%;transition:width 0.1s}
+  footer{text-align:center;color:var(--muted);font-size:0.8rem;margin-top:40px;padding:20px;line-height:1.6}
+  .error{
+    background:rgba(255,64,129,0.1);border:1px solid var(--accent);
+    padding:16px;border-radius:8px;margin:20px 0;text-align:center;
+  }
+  .missing{opacity:0.5}
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>邦楽人気プレイリスト</h1>
+    <div class="subtitle">話題のJ-POP 100選 / iTunes 30秒プレビュー試聴</div>
+    <div class="controls">
+      <button class="primary" id="loadBtn">プレイリストを読み込む</button>
+      <button id="playAllBtn" disabled>連続再生</button>
+      <button id="stopBtn" disabled>停止</button>
+    </div>
+  </header>
+  <div id="status" class="status">「プレイリストを読み込む」ボタンを押してください</div>
+  <div id="tracks"></div>
+  <footer>
+    Source: iTunes Search API (Apple Inc.)<br>
+    プレビュー音源は試聴目的のみ
+  </footer>
+</div>
+
+<div id="nowPlaying" class="now-playing">
+  <img id="npArt" src="" alt="">
+  <div class="np-info">
+    <div class="np-title" id="npTitle"></div>
+    <div class="np-artist" id="npArtist"></div>
+  </div>
+  <div class="progress" id="progress"><div class="progress-bar" id="progressBar"></div></div>
+  <audio id="player"></audio>
+</div>
+
+<script>
+// 話題の邦楽 100選（キュレーション）
+const PLAYLIST = [
+  {song:"ライラック",        artist:"Mrs. GREEN APPLE"},
+  {song:"アイドル",          artist:"YOASOBI"},
+  {song:"Bling-Bang-Bang-Born", artist:"Creepy Nuts"},
+  {song:"Subtitle",          artist:"Official髭男dism"},
+  {song:"晩餐歌",            artist:"tuki."},
+  {song:"KICK BACK",         artist:"米津玄師"},
+  {song:"さよーならまたいつか！", artist:"米津玄師"},
+  {song:"怪獣の花唄",        artist:"Vaundy"},
+  {song:"踊り子",            artist:"Vaundy"},
+  {song:"夜に駆ける",        artist:"YOASOBI"},
+  {song:"群青",              artist:"YOASOBI"},
+  {song:"SPECIALZ",          artist:"King Gnu"},
+  {song:"白日",              artist:"King Gnu"},
+  {song:"Pretender",         artist:"Official髭男dism"},
+  {song:"Lemon",             artist:"米津玄師"},
+  {song:"うっせぇわ",        artist:"Ado"},
+  {song:"唱",                artist:"Ado"},
+  {song:"マリーゴールド",    artist:"あいみょん"},
+  {song:"死ぬのがいいわ",    artist:"藤井風"},
+  {song:"シンデレラボーイ",  artist:"Saucy Dog"},
+  {song:"花に亡霊",          artist:"ヨルシカ"},
+  {song:"高嶺の花子さん",    artist:"back number"},
+  {song:"紅蓮華",            artist:"LiSA"},
+  {song:"ダンスホール",      artist:"Mrs. GREEN APPLE"},
+  {song:"青と夏",            artist:"Mrs. GREEN APPLE"},
+  {song:"ドライフラワー",    artist:"優里"},
+  {song:"ベテルギウス",      artist:"優里"},
+  {song:"怪物",              artist:"YOASOBI"},
+  {song:"もう少しだけ",      artist:"YOASOBI"},
+  {song:"ハルジオン",        artist:"YOASOBI"},
+  {song:"三原色",            artist:"YOASOBI"},
+  {song:"ミックスナッツ",    artist:"Official髭男dism"},
+  {song:"Cry Baby",          artist:"Official髭男dism"},
+  {song:"I LOVE...",         artist:"Official髭男dism"},
+  {song:"宿命",              artist:"Official髭男dism"},
+  {song:"ノーダウト",        artist:"Official髭男dism"},
+  {song:"飛行艇",            artist:"King Gnu"},
+  {song:"一途",              artist:"King Gnu"},
+  {song:"逆夢",              artist:"King Gnu"},
+  {song:"カメレオン",        artist:"King Gnu"},
+  {song:"三文小説",          artist:"King Gnu"},
+  {song:"パプリカ",          artist:"米津玄師"},
+  {song:"馬と鹿",            artist:"米津玄師"},
+  {song:"M八七",             artist:"米津玄師"},
+  {song:"灰色と青",          artist:"米津玄師"},
+  {song:"感電",              artist:"米津玄師"},
+  {song:"私は最強",          artist:"Ado"},
+  {song:"新時代",            artist:"Ado"},
+  {song:"踊",                artist:"Ado"},
+  {song:"阿修羅ちゃん",      artist:"Ado"},
+  {song:"Show",              artist:"Ado"},
+  {song:"ハート",            artist:"あいみょん"},
+  {song:"ハルノヒ",          artist:"あいみょん"},
+  {song:"愛を伝えたいだとか", artist:"あいみょん"},
+  {song:"君はロックを聴かない", artist:"あいみょん"},
+  {song:"裸の心",            artist:"あいみょん"},
+  {song:"きらり",            artist:"藤井風"},
+  {song:"何なんw",           artist:"藤井風"},
+  {song:"燃えよ",            artist:"藤井風"},
+  {song:"まつり",            artist:"藤井風"},
+  {song:"不可幸力",          artist:"Vaundy"},
+  {song:"走馬灯",            artist:"Vaundy"},
+  {song:"灯火",              artist:"Vaundy"},
+  {song:"しわあわせ",        artist:"Vaundy"},
+  {song:"ラブソング",        artist:"Saucy Dog"},
+  {song:"いつか",            artist:"Saucy Dog"},
+  {song:"真夜中のドア",      artist:"松原みき"},
+  {song:"プラスティック・ラブ", artist:"竹内まりや"},
+  {song:"残響散歌",          artist:"Aimer"},
+  {song:"カタオモイ",        artist:"Aimer"},
+  {song:"炎",                artist:"LiSA"},
+  {song:"廻廻奇譚",          artist:"Eve"},
+  {song:"ナンセンス文学",    artist:"Eve"},
+  {song:"インフェルノ",      artist:"Mrs. GREEN APPLE"},
+  {song:"僕のこと",          artist:"Mrs. GREEN APPLE"},
+  {song:"点描の唄",          artist:"Mrs. GREEN APPLE"},
+  {song:"アポロ",            artist:"ポルノグラフィティ"},
+  {song:"ハナミズキ",        artist:"一青窈"},
+  {song:"RPG",               artist:"SEKAI NO OWARI"},
+  {song:"Habit",             artist:"SEKAI NO OWARI"},
+  {song:"Dragon Night",      artist:"SEKAI NO OWARI"},
+  {song:"ロビンソン",        artist:"スピッツ"},
+  {song:"チェリー",          artist:"スピッツ"},
+  {song:"空も飛べるはず",    artist:"スピッツ"},
+  {song:"366日",             artist:"HY"},
+  {song:"海の幽霊",          artist:"米津玄師"},
+  {song:"ピースサイン",      artist:"米津玄師"},
+  {song:"orion",             artist:"米津玄師"},
+  {song:"第ゼロ感",          artist:"10-FEET"},
+  {song:"リライト",          artist:"ASIAN KUNG-FU GENERATION"},
+  {song:"完全感覚Dreamer",   artist:"ONE OK ROCK"},
+  {song:"The Beginning",     artist:"ONE OK ROCK"},
+  {song:"Wherever you are",  artist:"ONE OK ROCK"},
+  {song:"カルマ",            artist:"BUMP OF CHICKEN"},
+  {song:"天体観測",          artist:"BUMP OF CHICKEN"},
+  {song:"なんでもないや",    artist:"RADWIMPS"},
+  {song:"前前前世",          artist:"RADWIMPS"},
+  {song:"スパークル",        artist:"RADWIMPS"},
+  {song:"紅蓮の弓矢",        artist:"Linked Horizon"},
+  {song:"残酷な天使のテーゼ", artist:"高橋洋子"},
+  {song:"リンダリンダ",      artist:"THE BLUE HEARTS"},
+  {song:"オトノナルホウヘ→", artist:"Goose house"},
+  {song:"ブルーバード",      artist:"いきものがかり"},
+  {song:"恋",                artist:"星野源"}
+];
+
+const el = (id) => document.getElementById(id);
+const statusEl = el('status');
+const tracksEl = el('tracks');
+const player = el('player');
+const nowPlaying = el('nowPlaying');
+
+let tracks = [];
+let currentIndex = -1;
+let autoNext = false;
+
+async function searchTrack(song, artist){
+  const q = encodeURIComponent(song + ' ' + artist);
+  const url = `https://itunes.apple.com/search?term=${q}&country=jp&media=music&entity=song&limit=5&lang=ja_jp`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('検索失敗 ' + res.status);
+  const data = await res.json();
+  if (!data.results || !data.results.length) return null;
+  // アーティスト名が一致するものを優先
+  const norm = s => String(s||'').toLowerCase().replace(/\s+/g,'');
+  const wantArtist = norm(artist);
+  let best = data.results.find(r => norm(r.artistName).includes(wantArtist) || wantArtist.includes(norm(r.artistName)));
+  return best || data.results[0];
+}
+
+async function loadPlaylist(){
+  el('loadBtn').disabled = true;
+  tracksEl.innerHTML = '';
+  tracks = [];
+
+  // バッチ処理 (10件ずつ並列)
+  statusEl.innerHTML = '<div class="spinner"></div><div class="progress-text">楽曲情報を取得中… (0/' + PLAYLIST.length + ')</div>';
+  const BATCH = 10;
+  const results = new Array(PLAYLIST.length);
+  let done = 0;
+  for (let start = 0; start < PLAYLIST.length; start += BATCH) {
+    const slice = PLAYLIST.slice(start, start + BATCH);
+    const batchResults = await Promise.all(slice.map(async (item, j) => {
+      const i = start + j;
+      try {
+        const found = await searchTrack(item.song, item.artist);
+        if (!found) return {rank:i+1, title:item.song, artist:item.artist, artwork:'', previewUrl:null, url:'#', missing:true};
+        return {
+          rank: i+1,
+          title: found.trackName || item.song,
+          artist: found.artistName || item.artist,
+          artwork: (found.artworkUrl100 || '').replace('100x100','600x600'),
+          previewUrl: found.previewUrl,
+          url: found.trackViewUrl || '#'
+        };
+      } catch(e) {
+        return {rank:i+1, title:item.song, artist:item.artist, artwork:'', previewUrl:null, url:'#', missing:true};
+      }
+    }));
+    batchResults.forEach((r, j) => { results[start + j] = r; done++; });
+    statusEl.querySelector('.progress-text').textContent = `楽曲情報を取得中… (${done}/${PLAYLIST.length})`;
+    // 部分的な結果を逐次表示
+    tracks = results.filter(Boolean);
+    renderTracks();
+  }
+
+  tracks = results;
+  const found = tracks.filter(t => t.previewUrl).length;
+  if (found === 0) {
+    statusEl.innerHTML = '<div class="error">楽曲情報を取得できませんでした。<br>インターネット接続を確認してから再度お試しください。</div>';
+    el('loadBtn').disabled = false;
+    return;
+  }
+  renderTracks();
+  statusEl.innerHTML = '';
+  el('playAllBtn').disabled = false;
+  el('loadBtn').disabled = false;
+  el('loadBtn').textContent = '再読み込み';
+}
+
+function renderTracks(){
+  tracksEl.innerHTML = tracks.map((t, i) => `
+    <div class="track ${t.missing?'missing':''}" data-index="${i}">
+      <div class="rank">${t.rank}</div>
+      <img class="artwork" src="${t.artwork}" alt="" loading="lazy" onerror="this.style.background='#222'">
+      <div class="info">
+        <div class="title">${escapeHtml(t.title)}</div>
+        <div class="artist">${escapeHtml(t.artist)}</div>
+      </div>
+      <button class="play-btn" data-index="${i}" ${t.previewUrl?'':'disabled'} title="${t.previewUrl?'試聴':'プレビュー無し'}">▶</button>
+      <a class="external" href="${t.url}" target="_blank" rel="noopener" title="Apple Musicで開く">↗</a>
+    </div>
+  `).join('');
+
+  document.querySelectorAll('.play-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const i = parseInt(e.currentTarget.dataset.index);
+      togglePlay(i);
+    });
+  });
+}
+
+function togglePlay(i){
+  if(currentIndex === i && !player.paused){ player.pause(); return; }
+  playTrack(i);
+}
+
+function playTrack(i){
+  if(i<0 || i>=tracks.length) return;
+  const t = tracks[i];
+  if(!t.previewUrl) return;
+  currentIndex = i;
+  player.src = t.previewUrl;
+  player.play().catch(err => console.warn('再生エラー:', err));
+  el('npArt').src = t.artwork;
+  el('npTitle').textContent = t.title;
+  el('npArtist').textContent = t.artist;
+  nowPlaying.classList.add('active');
+  el('stopBtn').disabled = false;
+  updateButtons();
+}
+
+function updateButtons(){
+  document.querySelectorAll('.play-btn').forEach((btn, i) => {
+    btn.textContent = (i === currentIndex && !player.paused) ? '⏸' : '▶';
+  });
+}
+
+player.addEventListener('play', updateButtons);
+player.addEventListener('pause', updateButtons);
+player.addEventListener('ended', () => {
+  if(autoNext){
+    let next = currentIndex + 1;
+    while(next < tracks.length && !tracks[next].previewUrl) next++;
+    if(next < tracks.length) playTrack(next);
+    else { autoNext = false; nowPlaying.classList.remove('active'); }
+  }else{
+    nowPlaying.classList.remove('active');
+  }
+  updateButtons();
+});
+player.addEventListener('timeupdate', () => {
+  if(player.duration){
+    el('progressBar').style.width = (player.currentTime/player.duration*100)+'%';
+  }
+});
+el('progress').addEventListener('click', (e) => {
+  const rect = e.currentTarget.getBoundingClientRect();
+  const pct = (e.clientX - rect.left) / rect.width;
+  if(player.duration) player.currentTime = pct * player.duration;
+});
+
+el('loadBtn').addEventListener('click', loadPlaylist);
+el('playAllBtn').addEventListener('click', () => {
+  autoNext = true;
+  let first = tracks.findIndex(t => t.previewUrl);
+  if(first >= 0) playTrack(first);
+});
+el('stopBtn').addEventListener('click', () => {
+  autoNext = false;
+  player.pause();
+  nowPlaying.classList.remove('active');
+});
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// 自動読み込み
+window.addEventListener('load', loadPlaylist);
+</script>
+</body>
+</html>

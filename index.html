@@ -91,7 +91,7 @@
 <div class="container">
   <header>
     <h1>邦楽人気プレイリスト</h1>
-    <div class="subtitle">話題のJ-POP 100選 / iTunes 30秒プレビュー試聴</div>
+    <div class="subtitle">Apple Music Japan J-POPチャート TOP 100（リアルタイム更新）/ iTunes 30秒プレビュー試聴</div>
     <div class="controls">
       <button class="primary" id="loadBtn">プレイリストを読み込む</button>
       <button id="playAllBtn" disabled>連続再生</button>
@@ -101,7 +101,8 @@
   <div id="status" class="status">「プレイリストを読み込む」ボタンを押してください</div>
   <div id="tracks"></div>
   <footer>
-    Source: iTunes Search API (Apple Inc.)<br>
+    Source: iTunes RSS Feed — Top J-POP Songs, Japan (Apple Inc.)<br>
+    ランキングはApple Musicの実際のチャートを反映（キャッシュは15分で自動更新）<br>
     プレビュー音源は試聴目的のみ
   </footer>
 </div>
@@ -117,113 +118,11 @@
 </div>
 
 <script>
-// 話題の邦楽 100選（キュレーション）
-const PLAYLIST = [
-  {song:"ライラック",        artist:"Mrs. GREEN APPLE"},
-  {song:"アイドル",          artist:"YOASOBI"},
-  {song:"Bling-Bang-Bang-Born", artist:"Creepy Nuts"},
-  {song:"Subtitle",          artist:"Official髭男dism"},
-  {song:"晩餐歌",            artist:"tuki."},
-  {song:"KICK BACK",         artist:"米津玄師"},
-  {song:"さよーならまたいつか！", artist:"米津玄師"},
-  {song:"怪獣の花唄",        artist:"Vaundy"},
-  {song:"踊り子",            artist:"Vaundy"},
-  {song:"夜に駆ける",        artist:"YOASOBI"},
-  {song:"群青",              artist:"YOASOBI"},
-  {song:"SPECIALZ",          artist:"King Gnu"},
-  {song:"白日",              artist:"King Gnu"},
-  {song:"Pretender",         artist:"Official髭男dism"},
-  {song:"Lemon",             artist:"米津玄師"},
-  {song:"うっせぇわ",        artist:"Ado"},
-  {song:"唱",                artist:"Ado"},
-  {song:"マリーゴールド",    artist:"あいみょん"},
-  {song:"死ぬのがいいわ",    artist:"藤井風"},
-  {song:"シンデレラボーイ",  artist:"Saucy Dog"},
-  {song:"花に亡霊",          artist:"ヨルシカ"},
-  {song:"高嶺の花子さん",    artist:"back number"},
-  {song:"紅蓮華",            artist:"LiSA"},
-  {song:"ダンスホール",      artist:"Mrs. GREEN APPLE"},
-  {song:"青と夏",            artist:"Mrs. GREEN APPLE"},
-  {song:"ドライフラワー",    artist:"優里"},
-  {song:"ベテルギウス",      artist:"優里"},
-  {song:"怪物",              artist:"YOASOBI"},
-  {song:"もう少しだけ",      artist:"YOASOBI"},
-  {song:"ハルジオン",        artist:"YOASOBI"},
-  {song:"三原色",            artist:"YOASOBI"},
-  {song:"ミックスナッツ",    artist:"Official髭男dism"},
-  {song:"Cry Baby",          artist:"Official髭男dism"},
-  {song:"I LOVE...",         artist:"Official髭男dism"},
-  {song:"宿命",              artist:"Official髭男dism"},
-  {song:"ノーダウト",        artist:"Official髭男dism"},
-  {song:"飛行艇",            artist:"King Gnu"},
-  {song:"一途",              artist:"King Gnu"},
-  {song:"逆夢",              artist:"King Gnu"},
-  {song:"カメレオン",        artist:"King Gnu"},
-  {song:"三文小説",          artist:"King Gnu"},
-  {song:"パプリカ",          artist:"米津玄師"},
-  {song:"馬と鹿",            artist:"米津玄師"},
-  {song:"M八七",             artist:"米津玄師"},
-  {song:"灰色と青",          artist:"米津玄師"},
-  {song:"感電",              artist:"米津玄師"},
-  {song:"私は最強",          artist:"Ado"},
-  {song:"新時代",            artist:"Ado"},
-  {song:"踊",                artist:"Ado"},
-  {song:"阿修羅ちゃん",      artist:"Ado"},
-  {song:"Show",              artist:"Ado"},
-  {song:"ハート",            artist:"あいみょん"},
-  {song:"ハルノヒ",          artist:"あいみょん"},
-  {song:"愛を伝えたいだとか", artist:"あいみょん"},
-  {song:"君はロックを聴かない", artist:"あいみょん"},
-  {song:"裸の心",            artist:"あいみょん"},
-  {song:"きらり",            artist:"藤井風"},
-  {song:"何なんw",           artist:"藤井風"},
-  {song:"燃えよ",            artist:"藤井風"},
-  {song:"まつり",            artist:"藤井風"},
-  {song:"不可幸力",          artist:"Vaundy"},
-  {song:"走馬灯",            artist:"Vaundy"},
-  {song:"灯火",              artist:"Vaundy"},
-  {song:"しわあわせ",        artist:"Vaundy"},
-  {song:"ラブソング",        artist:"Saucy Dog"},
-  {song:"いつか",            artist:"Saucy Dog"},
-  {song:"真夜中のドア",      artist:"松原みき"},
-  {song:"プラスティック・ラブ", artist:"竹内まりや"},
-  {song:"残響散歌",          artist:"Aimer"},
-  {song:"カタオモイ",        artist:"Aimer"},
-  {song:"炎",                artist:"LiSA"},
-  {song:"廻廻奇譚",          artist:"Eve"},
-  {song:"ナンセンス文学",    artist:"Eve"},
-  {song:"インフェルノ",      artist:"Mrs. GREEN APPLE"},
-  {song:"僕のこと",          artist:"Mrs. GREEN APPLE"},
-  {song:"点描の唄",          artist:"Mrs. GREEN APPLE"},
-  {song:"アポロ",            artist:"ポルノグラフィティ"},
-  {song:"ハナミズキ",        artist:"一青窈"},
-  {song:"RPG",               artist:"SEKAI NO OWARI"},
-  {song:"Habit",             artist:"SEKAI NO OWARI"},
-  {song:"Dragon Night",      artist:"SEKAI NO OWARI"},
-  {song:"ロビンソン",        artist:"スピッツ"},
-  {song:"チェリー",          artist:"スピッツ"},
-  {song:"空も飛べるはず",    artist:"スピッツ"},
-  {song:"366日",             artist:"HY"},
-  {song:"海の幽霊",          artist:"米津玄師"},
-  {song:"ピースサイン",      artist:"米津玄師"},
-  {song:"orion",             artist:"米津玄師"},
-  {song:"第ゼロ感",          artist:"10-FEET"},
-  {song:"リライト",          artist:"ASIAN KUNG-FU GENERATION"},
-  {song:"完全感覚Dreamer",   artist:"ONE OK ROCK"},
-  {song:"The Beginning",     artist:"ONE OK ROCK"},
-  {song:"Wherever you are",  artist:"ONE OK ROCK"},
-  {song:"カルマ",            artist:"BUMP OF CHICKEN"},
-  {song:"天体観測",          artist:"BUMP OF CHICKEN"},
-  {song:"なんでもないや",    artist:"RADWIMPS"},
-  {song:"前前前世",          artist:"RADWIMPS"},
-  {song:"スパークル",        artist:"RADWIMPS"},
-  {song:"紅蓮の弓矢",        artist:"Linked Horizon"},
-  {song:"残酷な天使のテーゼ", artist:"高橋洋子"},
-  {song:"リンダリンダ",      artist:"THE BLUE HEARTS"},
-  {song:"オトノナルホウヘ→", artist:"Goose house"},
-  {song:"ブルーバード",      artist:"いきものがかり"},
-  {song:"恋",                artist:"星野源"}
-];
+// Apple Music Japan の J-POP Top Songs チャート（リアルタイム）
+const CHART_URL = 'https://itunes.apple.com/jp/rss/topsongs/limit=100/genre=27/json';
+const CHART_URL_FALLBACK = 'https://itunes.apple.com/jp/rss/topsongs/limit=100/json';
+const LOOKUP_CHUNK_SIZE = 50;
+const CACHE_TTL_MS = 15 * 60 * 1000; // 15分でチャートを再取得
 
 const el = (id) => document.getElementById(id);
 const statusEl = el('status');
@@ -235,113 +134,111 @@ let tracks = [];
 let currentIndex = -1;
 let autoNext = false;
 
-const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-
-// localStorage キャッシュ
-const CACHE_KEY = 'jp_music_playlist_v3';
+// localStorage キャッシュ（チャート全体 + 取得時刻）
+const CACHE_KEY = 'jp_music_chart_v4';
 function loadCache(){
-  try { return JSON.parse(localStorage.getItem(CACHE_KEY) || '{}'); }
-  catch(e) { return {}; }
+  try { return JSON.parse(localStorage.getItem(CACHE_KEY) || 'null'); }
+  catch(e) { return null; }
 }
-function saveCache(cache){
-  try { localStorage.setItem(CACHE_KEY, JSON.stringify(cache)); }
+function saveCache(tracks){
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify({timestamp: Date.now(), tracks})); }
   catch(e) {}
 }
 
-async function searchTrack(song, artist, retries = 3){
-  const q = encodeURIComponent(song + ' ' + artist);
-  const url = `https://itunes.apple.com/search?term=${q}&country=jp&media=music&entity=song&limit=5&lang=ja_jp`;
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      const res = await fetch(url);
-      if (res.status === 403 || res.status === 429) {
-        // レート制限 — 段階的に待機を延ばす
-        await sleep(3000 + attempt * 2000);
-        continue;
-      }
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const data = await res.json();
-      if (!data.results || !data.results.length) return null;
-      const norm = s => String(s||'').toLowerCase().replace(/\s+/g,'');
-      const wantArtist = norm(artist);
-      let best = data.results.find(r => norm(r.artistName).includes(wantArtist) || wantArtist.includes(norm(r.artistName)));
-      return best || data.results[0];
-    } catch (e) {
-      if (attempt === retries) return null;
-      await sleep(1500 + attempt * 1000);
-    }
+async function fetchChartEntries(){
+  let res = await fetch(CHART_URL);
+  let data = res.ok ? await res.json() : null;
+  let entries = data?.feed?.entry || [];
+  if (!entries.length) {
+    res = await fetch(CHART_URL_FALLBACK);
+    data = res.ok ? await res.json() : null;
+    entries = data?.feed?.entry || [];
   }
-  return null;
+  return entries;
+}
+
+async function fetchChart(){
+  const entries = await fetchChartEntries();
+  if (!entries.length) throw new Error('チャートを取得できませんでした');
+
+  const chartItems = entries.map((e, i) => ({
+    rank: i + 1,
+    id: e.id?.attributes?.['im:id'],
+    title: e['im:name']?.label || '',
+    artist: e['im:artist']?.label || '',
+    url: e.link?.attributes?.href || '#',
+    artwork: e['im:image']?.[e['im:image'].length - 1]?.label || ''
+  })).filter(t => t.id);
+
+  // プレビューURLをまとめて取得（数曲ずつではなく数回のリクエストで完了させる）
+  const ids = chartItems.map(t => t.id);
+  const chunks = [];
+  for (let i = 0; i < ids.length; i += LOOKUP_CHUNK_SIZE) chunks.push(ids.slice(i, i + LOOKUP_CHUNK_SIZE));
+  const lookupResults = await Promise.all(chunks.map(chunk =>
+    fetch(`https://itunes.apple.com/lookup?id=${chunk.join(',')}&country=jp`)
+      .then(r => r.ok ? r.json() : {results:[]})
+      .catch(() => ({results:[]}))
+  ));
+  const previewMap = {};
+  lookupResults.forEach(lr => (lr.results || []).forEach(r => {
+    if (r.trackId) previewMap[String(r.trackId)] = r;
+  }));
+
+  return chartItems.map(item => {
+    const found = previewMap[item.id];
+    return {
+      rank: item.rank,
+      title: found?.trackName || item.title,
+      artist: found?.artistName || item.artist,
+      artwork: (found?.artworkUrl100 || item.artwork || '').replace('100x100', '600x600'),
+      previewUrl: found?.previewUrl || null,
+      url: found?.trackViewUrl || item.url,
+      missing: !found?.previewUrl
+    };
+  });
 }
 
 async function loadPlaylist(forceReload = false){
   el('loadBtn').disabled = true;
-  tracksEl.innerHTML = '';
-  tracks = [];
 
-  const cache = forceReload ? {} : loadCache();
-  let cachedCount = 0;
-
-  // まずキャッシュから即座に表示
-  PLAYLIST.forEach((item, i) => {
-    const key = item.song + '||' + item.artist;
-    if (cache[key]) {
-      tracks[i] = { ...cache[key], rank: i+1 };
-      cachedCount++;
-    }
-  });
-  if (cachedCount > 0) renderTracks();
-
-  statusEl.innerHTML = '<div class="spinner"></div><div class="progress-text">楽曲情報を取得中… (' + cachedCount + '/' + PLAYLIST.length + ')</div>';
-
-  // 未取得の曲のみを逐次処理（レート制限回避のため1件ずつ、間に300ms）
-  let done = cachedCount;
-  for (let i = 0; i < PLAYLIST.length; i++) {
-    if (tracks[i] && tracks[i].previewUrl) continue;
-    const item = PLAYLIST[i];
-    const key = item.song + '||' + item.artist;
-    let result;
-    try {
-      const found = await searchTrack(item.song, item.artist);
-      if (found) {
-        result = {
-          rank: i+1,
-          title: found.trackName || item.song,
-          artist: found.artistName || item.artist,
-          artwork: (found.artworkUrl100 || '').replace('100x100','600x600'),
-          previewUrl: found.previewUrl,
-          url: found.trackViewUrl || '#'
-        };
-        cache[key] = result;
-      } else {
-        result = {rank:i+1, title:item.song, artist:item.artist, artwork:'', previewUrl:null, url:'#', missing:true};
-      }
-    } catch(e) {
-      result = {rank:i+1, title:item.song, artist:item.artist, artwork:'', previewUrl:null, url:'#', missing:true};
-    }
-    tracks[i] = result;
-    done++;
-    if (done % 5 === 0 || done === PLAYLIST.length) {
-      saveCache(cache);
-      renderTracks();
-    }
-    const progressEl = statusEl.querySelector('.progress-text');
-    if (progressEl) progressEl.textContent = `楽曲情報を取得中… (${done}/${PLAYLIST.length})`;
-    // レート制限回避のため待機（キャッシュヒットなし時のみ）
-    await sleep(300);
+  const cached = forceReload ? null : loadCache();
+  if (cached && cached.tracks?.length && (Date.now() - cached.timestamp) < CACHE_TTL_MS) {
+    tracks = cached.tracks;
+    renderTracks();
+    reportStatus(cached.timestamp);
+    el('playAllBtn').disabled = false;
+    el('loadBtn').disabled = false;
+    el('loadBtn').textContent = '再読み込み';
+    return;
   }
 
-  saveCache(cache);
-  renderTracks();
-  const found = tracks.filter(t => t.previewUrl).length;
-  if (found === 0) {
-    statusEl.innerHTML = '<div class="error">楽曲情報を取得できませんでした。<br>インターネット接続を確認してから再度お試しください。</div>';
-  } else {
-    statusEl.innerHTML = `<div style="color:rgba(255,255,255,0.5);font-size:0.85rem">${found}/${PLAYLIST.length} 曲を読み込みました</div>`;
+  statusEl.innerHTML = '<div class="spinner"></div><div class="progress-text">リアルタイムチャートを取得中…</div>';
+  try {
+    tracks = await fetchChart();
+    const now = Date.now();
+    saveCache(tracks);
+    renderTracks();
+    reportStatus(now);
+  } catch (e) {
+    console.error(e);
+    if (cached && cached.tracks?.length) {
+      tracks = cached.tracks;
+      renderTracks();
+      reportStatus(cached.timestamp, true);
+    } else {
+      statusEl.innerHTML = '<div class="error">チャート情報を取得できませんでした。<br>インターネット接続を確認してから再度お試しください。</div>';
+    }
   }
   el('playAllBtn').disabled = false;
   el('loadBtn').disabled = false;
   el('loadBtn').textContent = '再読み込み';
+}
+
+function reportStatus(timestamp, stale = false){
+  const found = tracks.filter(t => t.previewUrl).length;
+  const time = new Date(timestamp).toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'});
+  const staleNote = stale ? '（最新の取得に失敗したため前回のデータを表示中）' : '';
+  statusEl.innerHTML = `<div style="color:rgba(255,255,255,0.5);font-size:0.85rem">${found}/${tracks.length} 曲 ・ 最終更新 ${time}${staleNote}</div>`;
 }
 
 function renderTracks(){

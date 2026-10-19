@@ -64,8 +64,20 @@
   }
   .play-btn:hover{transform:scale(1.1)}
   .play-btn:disabled{opacity:0.3;cursor:not-allowed;transform:none}
+  .mv-btn{
+    width:44px;height:44px;border-radius:50%;flex-shrink:0;
+    background:var(--card);border:1px solid var(--border);color:var(--text);
+    cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1.05rem;
+    transition:transform 0.2s,background 0.2s;padding:0;
+  }
+  .mv-btn:hover{transform:scale(1.1);background:var(--card-hover)}
+  .mv-btn.active{background:linear-gradient(135deg,var(--accent-2),var(--accent));border-color:transparent}
+  .mv-btn.yt{font-size:0.7rem;font-weight:700;letter-spacing:0.02em;opacity:0.7;text-decoration:none}
+  .mv-btn.yt:hover{opacity:1}
   .external{color:var(--muted);text-decoration:none;font-size:1.2rem;padding:8px}
   .external:hover{color:var(--accent)}
+  button.toggle.on{background:rgba(124,77,255,0.35);border-color:var(--accent-2)}
+  button.toggle.on::before{content:"✓ "}
   audio{display:none}
   .now-playing{
     position:fixed;bottom:0;left:0;right:0;background:rgba(15,12,41,0.95);
@@ -101,6 +113,16 @@
     box-shadow:0 16px 48px rgba(0,0,0,0.55);background:#222;animation:fadeIn 0.4s ease;
   }
   @keyframes fadeIn{from{opacity:0;transform:scale(0.96)}to{opacity:1;transform:scale(1)}}
+  /* PV 再生時：ジャケットの代わりに動画を大きく表示 */
+  .hero-video{
+    display:none;position:relative;z-index:1;width:100%;max-width:560px;aspect-ratio:16/9;
+    border-radius:16px;background:#000;box-shadow:0 16px 48px rgba(0,0,0,0.55);flex-shrink:0;
+    animation:fadeIn 0.4s ease;
+  }
+  .hero.video-mode .hero-video{display:block}
+  .hero.video-mode .hero-art{display:none}
+  .hero.video-mode{flex-direction:column;text-align:center}
+  .hero-mvname{font-size:0.8rem;color:var(--muted);margin-top:6px;opacity:0.8}
   .hero-info{position:relative;z-index:1;flex:1;min-width:0}
   .hero-label{font-size:0.75rem;letter-spacing:0.15em;color:var(--accent);font-weight:700;margin-bottom:8px}
   .hero-title{font-size:1.7rem;font-weight:800;line-height:1.25;margin-bottom:6px;word-break:break-word}
@@ -118,21 +140,24 @@
 <div class="container">
   <header>
     <h1>邦楽人気プレイリスト</h1>
-    <div class="subtitle">Apple Music Japan J-POPチャート TOP 100（リアルタイム更新）/ iTunes 30秒プレビュー試聴</div>
+    <div class="subtitle">Apple Music Japan J-POPチャート TOP 100（リアルタイム更新）/ iTunes 30秒プレビュー試聴・PV視聴</div>
     <div class="controls">
       <button class="primary" id="loadBtn">プレイリストを読み込む</button>
       <button id="playAllBtn" disabled>連続再生</button>
       <button id="stopBtn" disabled>停止</button>
+      <button id="mvModeBtn" class="toggle" title="PVがある曲は ▶ や連続再生でも動画を流す">PV優先</button>
     </div>
   </header>
   <div id="hero" class="hero">
     <div class="hero-bg" id="heroBg"></div>
     <img id="heroArt" class="hero-art" src="" alt="アルバムジャケット">
+    <video id="heroVideo" class="hero-video" playsinline controls preload="none"></video>
     <div class="hero-info">
-      <div class="hero-label">NOW PLAYING</div>
+      <div class="hero-label" id="heroLabel">NOW PLAYING</div>
       <div class="hero-title" id="heroTitle"></div>
       <div class="hero-artist" id="heroArtist"></div>
       <div class="hero-album" id="heroAlbum"></div>
+      <div class="hero-mvname" id="heroMvName"></div>
       <div class="hero-rank" id="heroRank"></div>
     </div>
   </div>
@@ -141,7 +166,7 @@
   <footer>
     Source: iTunes RSS Feed — Top J-POP Songs, Japan (Apple Inc.)<br>
     ランキングはApple Musicの実際のチャートを反映（キャッシュは15分で自動更新）<br>
-    プレビュー音源は試聴目的のみ
+    プレビュー音源・PV映像（約30秒）は iTunes Store の試聴用プレビューです。PVが配信されていない曲は YT ボタンから YouTube 検索を開けます
   </footer>
 </div>
 
@@ -160,6 +185,7 @@
 const CHART_URL = 'https://itunes.apple.com/jp/rss/topsongs/limit=100/genre=27/json';
 const CHART_URL_FALLBACK = 'https://itunes.apple.com/jp/rss/topsongs/limit=100/json';
 const LOOKUP_CHUNK_SIZE = 50;
+const MV_LOOKUP_CHUNK_SIZE = 10; // アーティスト10件ずつ MV を lookup（limit はアーティスト毎に適用）
 const CACHE_TTL_MS = 15 * 60 * 1000; // 15分でチャートを再取得
 
 const el = (id) => document.getElementById(id);
@@ -168,12 +194,18 @@ const tracksEl = el('tracks');
 const player = el('player');
 const nowPlaying = el('nowPlaying');
 
+const video = el('heroVideo');
+const MV_MODE_KEY = 'jp_music_mv_mode';
 let tracks = [];
 let currentIndex = -1;
 let autoNext = false;
+let currentIsVideo = false;          // いま再生中のメディアが PV か
+let mvMode = false;                  // PV優先モード（▶・連続再生で PV があれば動画を使う）
+try { mvMode = localStorage.getItem(MV_MODE_KEY) === '1'; } catch(e) {}
+const activeMedia = () => currentIsVideo ? video : player;
 
 // localStorage キャッシュ（チャート全体 + 取得時刻）
-const CACHE_KEY = 'jp_music_chart_v5';
+const CACHE_KEY = 'jp_music_chart_v6'; // v6: MV情報を追加
 function loadCache(){
   try { return JSON.parse(localStorage.getItem(CACHE_KEY) || 'null'); }
   catch(e) { return null; }
@@ -222,8 +254,13 @@ async function fetchChart(){
     if (r.trackId) previewMap[String(r.trackId)] = r;
   }));
 
+  // ミュージックビデオ（PV）のプレビューをアーティスト単位でまとめて取得
+  const artistIds = [...new Set(chartItems.map(t => previewMap[t.id]?.artistId).filter(Boolean))];
+  const mvByArtist = await fetchMusicVideos(artistIds);
+
   return chartItems.map(item => {
     const found = previewMap[item.id];
+    const mv = found ? matchMusicVideo(found.trackName || item.title, mvByArtist[found.artistId] || []) : null;
     return {
       rank: item.rank,
       title: found?.trackName || item.title,
@@ -231,10 +268,66 @@ async function fetchChart(){
       artwork: (found?.artworkUrl100 || item.artwork || '').replace('100x100', '600x600'),
       album: found?.collectionName || '',
       previewUrl: found?.previewUrl || null,
+      mvUrl: mv?.previewUrl || null,
+      mvName: mv?.trackName || null,
+      mvArtwork: (mv?.artworkUrl100 || '').replace('100x100', '600x600') || null,
       url: found?.trackViewUrl || item.url,
       missing: !found?.previewUrl
     };
   });
+}
+
+// iTunes lookup は複数の artistId をまとめて渡せる。limit はアーティストごとに適用される。
+async function fetchMusicVideos(artistIds){
+  const chunks = [];
+  for (let i = 0; i < artistIds.length; i += MV_LOOKUP_CHUNK_SIZE) chunks.push(artistIds.slice(i, i + MV_LOOKUP_CHUNK_SIZE));
+  const results = await Promise.all(chunks.map(chunk =>
+    fetch(`https://itunes.apple.com/lookup?id=${chunk.join(',')}&entity=musicVideo&country=jp&limit=200`)
+      .then(r => r.ok ? r.json() : {results:[]})
+      .catch(() => ({results:[]}))
+  ));
+  const byArtist = {};
+  results.forEach(lr => (lr.results || []).forEach(r => {
+    if (r.wrapperType !== 'track' || !r.previewUrl) return;
+    (byArtist[r.artistId] ||= []).push(r);
+  }));
+  return byArtist;
+}
+
+// 曲名を正規化（全角/半角・大文字小文字・空白・記号・feat. 表記などの揺れを吸収）
+function normalizeTitle(s){
+  return String(s || '')
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/\s*[\(\[（【][^\)\]）】]*(feat\.?|with|ver\.?|version|remix|live|ライブ|lyric|mv|music video|映像|edit)[^\)\]）】]*[\)\]）】]/g, '')
+    .replace(/\s*[-–—−‐]\s*.*$/, '')      // 「晩餐歌 - Bansanka」の英題部分などを除去
+    .replace(/[\s　!！?？。、,.:;'"“”‘’・♡♥☆★~〜\-]/g, '')
+    .trim();
+}
+
+function matchMusicVideo(songTitle, videos){
+  if (!videos.length) return null;
+  const target = normalizeTitle(songTitle);
+  if (!target) return null;
+  const isLive  = v => /live|ライブ|tour|ツアー/i.test(v.trackName);
+  const isLyric = v => /lyric|リリック/i.test(v.trackName);
+  const score = v => {
+    const n = normalizeTitle(v.trackName);
+    if (!n) return -1;
+    let s = 0;
+    if (n === target) s = 100;
+    else if (n.startsWith(target) || target.startsWith(n)) s = 60;
+    else return -1;
+    if (isLive(v)) s -= 30;      // 本編MVを優先、ライブ映像は次点
+    if (isLyric(v)) s -= 15;     // リリックビデオも次点
+    return s;
+  };
+  let best = null, bestScore = -1;
+  for (const v of videos) {
+    const s = score(v);
+    if (s > bestScore) { best = v; bestScore = s; }
+  }
+  return bestScore >= 30 ? best : null;
 }
 
 async function loadPlaylist(forceReload = false){
@@ -275,9 +368,14 @@ async function loadPlaylist(forceReload = false){
 
 function reportStatus(timestamp, stale = false){
   const found = tracks.filter(t => t.previewUrl).length;
+  const mvCount = tracks.filter(t => t.mvUrl).length;
   const time = new Date(timestamp).toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'});
   const staleNote = stale ? '（最新の取得に失敗したため前回のデータを表示中）' : '';
-  statusEl.innerHTML = `<div style="color:rgba(255,255,255,0.5);font-size:0.85rem">${found}/${tracks.length} 曲 ・ 最終更新 ${time}${staleNote}</div>`;
+  statusEl.innerHTML = `<div style="color:rgba(255,255,255,0.5);font-size:0.85rem">${found}/${tracks.length} 曲 ・ PVあり ${mvCount} 曲 ・ 最終更新 ${time}${staleNote}</div>`;
+}
+
+function youtubeSearchUrl(t){
+  return 'https://www.youtube.com/results?search_query=' + encodeURIComponent(`${t.artist} ${t.title} MV`);
 }
 
 function renderTracks(){
@@ -290,6 +388,9 @@ function renderTracks(){
         <div class="artist">${escapeHtml(t.artist)}</div>
       </div>
       <button class="play-btn" data-index="${i}" ${t.previewUrl?'':'disabled'} title="${t.previewUrl?'試聴':'プレビュー無し'}">▶</button>
+      ${t.mvUrl
+        ? `<button class="mv-btn" data-index="${i}" title="PVを見る${t.mvName && t.mvName!==t.title ? '：'+escapeHtml(t.mvName) : ''}">🎬</button>`
+        : `<a class="mv-btn yt" href="${youtubeSearchUrl(t)}" target="_blank" rel="noopener" title="iTunesにPVがないため YouTube で検索">YT</a>`}
       <a class="external" href="${t.url}" target="_blank" rel="noopener" title="Apple Musicで開く">↗</a>
     </div>
   `).join('');
@@ -297,34 +398,56 @@ function renderTracks(){
   document.querySelectorAll('.play-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       const i = parseInt(e.currentTarget.dataset.index);
-      togglePlay(i);
+      togglePlay(i, mvMode && !!tracks[i].mvUrl);
+    });
+  });
+  document.querySelectorAll('button.mv-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const i = parseInt(e.currentTarget.dataset.index);
+      togglePlay(i, true);
     });
   });
 }
 
-function togglePlay(i){
-  if(currentIndex === i && !player.paused){ player.pause(); return; }
-  playTrack(i);
+function togglePlay(i, asVideo){
+  if(currentIndex === i && currentIsVideo === asVideo && !activeMedia().paused){ activeMedia().pause(); return; }
+  playTrack(i, asVideo);
 }
 
-function playTrack(i){
+function stopAllMedia(){
+  player.pause();
+  video.pause();
+}
+
+function playTrack(i, asVideo = mvMode){
   if(i<0 || i>=tracks.length) return;
   const t = tracks[i];
-  if(!t.previewUrl) return;
+  const useVideo = asVideo && !!t.mvUrl;
+  if(!useVideo && !t.previewUrl) return;
+  stopAllMedia();
   currentIndex = i;
-  player.src = t.previewUrl;
-  player.play().catch(err => console.warn('再生エラー:', err));
+  currentIsVideo = useVideo;
+  if(useVideo){
+    video.poster = t.mvArtwork || t.artwork;
+    video.src = t.mvUrl;
+    video.play().catch(err => console.warn('PV再生エラー:', err));
+  }else{
+    video.removeAttribute('src'); video.load();
+    player.src = t.previewUrl;
+    player.play().catch(err => console.warn('再生エラー:', err));
+  }
   el('npArt').src = t.artwork;
   el('npTitle').textContent = t.title;
   el('npArtist').textContent = t.artist;
   nowPlaying.classList.add('active');
-  showHero(t);
+  showHero(t, useVideo);
   el('stopBtn').disabled = false;
   updateButtons();
 }
 
-// 再生中の曲のジャケットを大きく表示（曲が変わるたびに差し替え）
-function showHero(t){
+// 再生中の曲のジャケット（または PV）を大きく表示（曲が変わるたびに差し替え）
+function showHero(t, isVideo = false){
+  const hero = el('hero');
   const art = el('heroArt');
   // 再アニメーションのため一度クラスを外す
   art.style.animation = 'none';
@@ -333,55 +456,87 @@ function showHero(t){
   art.src = t.artwork;
   art.alt = `${t.title} - ${t.artist} のジャケット`;
   el('heroBg').style.backgroundImage = t.artwork ? `url("${t.artwork}")` : 'none';
+  el('heroLabel').textContent = isVideo ? 'NOW PLAYING — MUSIC VIDEO' : 'NOW PLAYING';
   el('heroTitle').textContent = t.title;
   el('heroArtist').textContent = t.artist;
   el('heroAlbum').textContent = t.album ? `アルバム：${t.album}` : '';
+  el('heroMvName').textContent = (isVideo && t.mvName && t.mvName !== t.title) ? `映像：${t.mvName}` : '';
   el('heroRank').textContent = `チャート ${t.rank} 位`;
-  el('hero').classList.add('active');
+  hero.classList.toggle('video-mode', isVideo);
+  hero.classList.add('active');
+  if(isVideo) hero.scrollIntoView({behavior:'smooth', block:'nearest'});
 }
 
 function updateButtons(){
+  const playing = !activeMedia().paused;
   document.querySelectorAll('.play-btn').forEach((btn, i) => {
-    btn.textContent = (i === currentIndex && !player.paused) ? '⏸' : '▶';
+    btn.textContent = (i === currentIndex && playing && !currentIsVideo) ? '⏸' : '▶';
+  });
+  document.querySelectorAll('button.mv-btn').forEach(btn => {
+    const i = parseInt(btn.dataset.index);
+    const on = i === currentIndex && playing && currentIsVideo;
+    btn.classList.toggle('active', on);
+    btn.textContent = on ? '⏸' : '🎬';
   });
   document.querySelectorAll('.track').forEach((row, i) => {
-    row.classList.toggle('playing', i === currentIndex && !player.paused);
+    row.classList.toggle('playing', i === currentIndex && playing);
   });
 }
 
-player.addEventListener('play', updateButtons);
-player.addEventListener('pause', updateButtons);
-player.addEventListener('ended', () => {
+function playableAt(i){
+  const t = tracks[i];
+  return !!(t.previewUrl || (mvMode && t.mvUrl));
+}
+
+function onMediaEnded(){
   if(autoNext){
     let next = currentIndex + 1;
-    while(next < tracks.length && !tracks[next].previewUrl) next++;
-    if(next < tracks.length) playTrack(next);
+    while(next < tracks.length && !playableAt(next)) next++;
+    if(next < tracks.length) playTrack(next, mvMode);
     else { autoNext = false; nowPlaying.classList.remove('active'); }
   }else{
     nowPlaying.classList.remove('active');
   }
   updateButtons();
-});
-player.addEventListener('timeupdate', () => {
-  if(player.duration){
-    el('progressBar').style.width = (player.currentTime/player.duration*100)+'%';
+}
+function onTimeUpdate(e){
+  const m = e.currentTarget;
+  if(m === activeMedia() && m.duration){
+    el('progressBar').style.width = (m.currentTime/m.duration*100)+'%';
   }
+}
+[player, video].forEach(m => {
+  m.addEventListener('play', updateButtons);
+  m.addEventListener('pause', updateButtons);
+  m.addEventListener('ended', (e) => { if(e.currentTarget === activeMedia()) onMediaEnded(); });
+  m.addEventListener('timeupdate', onTimeUpdate);
 });
 el('progress').addEventListener('click', (e) => {
   const rect = e.currentTarget.getBoundingClientRect();
   const pct = (e.clientX - rect.left) / rect.width;
-  if(player.duration) player.currentTime = pct * player.duration;
+  const m = activeMedia();
+  if(m.duration) m.currentTime = pct * m.duration;
 });
+
+function renderMvModeBtn(){
+  el('mvModeBtn').classList.toggle('on', mvMode);
+}
+el('mvModeBtn').addEventListener('click', () => {
+  mvMode = !mvMode;
+  try { localStorage.setItem(MV_MODE_KEY, mvMode ? '1' : '0'); } catch(e) {}
+  renderMvModeBtn();
+});
+renderMvModeBtn();
 
 el('loadBtn').addEventListener('click', () => loadPlaylist(true));
 el('playAllBtn').addEventListener('click', () => {
   autoNext = true;
-  let first = tracks.findIndex(t => t.previewUrl);
-  if(first >= 0) playTrack(first);
+  let first = tracks.findIndex((t, i) => playableAt(i));
+  if(first >= 0) playTrack(first, mvMode);
 });
 el('stopBtn').addEventListener('click', () => {
   autoNext = false;
-  player.pause();
+  stopAllMedia();
   nowPlaying.classList.remove('active');
 });
 
